@@ -400,6 +400,13 @@ class TemplateController(Controller):
         st = self.spike_templates[spike_ids]
         return np.bincount(st, minlength=self.n_templates)
 
+    def get_main_templates(self, cluster_ids):
+        """
+        Gets the largest contributing template for a given set of clusters.
+        """
+        return [np.argmax(self.get_cluster_templates(int(clu)))
+                for clu in cluster_ids]
+
     def get_background_features(self):
         # Disable for now
         pass
@@ -426,6 +433,7 @@ class TemplateController(Controller):
         self.get_cluster_templates = ctx.cache(self.get_cluster_templates)
         self.get_cluster_pair_features = ctx.cache(
             self.get_cluster_pair_features)
+        self.get_main_templates = ctx.cache(self.get_main_templates)
 
     def get_waveform_lims(self):
         n_spikes = self.n_spikes_waveforms_lim
@@ -590,12 +598,13 @@ class TemplateController(Controller):
                 ]
 
     def similarity(self, cluster_id):
-        count = self.get_cluster_templates(cluster_id)
-        # Load the templates similar to the largest parent template.
-        largest_template = np.argmax(count)
-        sim = self.similar_templates[largest_template]
-        templates = np.argsort(sim)[::-1]
-        return [(int(c), sim[c]) for i, c in enumerate(templates)]
+        largest_template = np.argmax(self.get_cluster_templates(cluster_id))
+        main_templates = self.get_main_templates(self.cluster_ids)
+        # Load the clusters similar to the main parent template.
+        sim = self.similar_templates[largest_template, main_templates]
+        sim_sorted = np.argsort(sim)[::-1]
+        return [(self.cluster_ids[int(c)], sim[c])
+                for i, c in enumerate(sim_sorted)]
 
     def add_amplitude_view(self, gui):
         v = AmplitudeView(coords=self.get_amplitudes)
